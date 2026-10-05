@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Weather App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .weather-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            transition: all 0.3s ease;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="weather-card rounded-3xl p-8 w-full max-w-md mx-4 text-center relative overflow-hidden">
+        
+        <!-- Loading State -->
+        <div id="loading-state" class="flex flex-col items-center justify-center py-10">
+            <div class="spinner mb-4"></div>
+            <p class="text-gray-600 font-medium">Detecting your location...</p>
+            <p class="text-sm text-gray-400 mt-2">Please ensure location services are enabled.</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden flex-col items-center justify-center py-8">
+            <i class="fas fa-exclamation-triangle text-red-500 text-5xl mb-4"></i>
+            <h2 class="text-xl font-semibold text-gray-800 mb-2">Oops!</h2>
+            <p id="error-message" class="text-gray-600 text-sm mb-6">Could not fetch weather data.</p>
+            <button onclick="getLocation()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-full transition duration-300">
+                Try Again
+            </button>
+        </div>
+
+        <!-- Weather Data State -->
+        <div id="weather-state" class="hidden fade-in">
+            <!-- Header section with Location -->
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-gray-800 tracking-wide">Current Weather</h1>
+                <p id="location-name" class="text-gray-500 text-sm mt-1"><i class="fas fa-map-marker-alt mr-1"></i> My Location</p>
+            </div>
+
+            <!-- Main Temperature Display -->
+            <div class="flex flex-col items-center justify-center mb-8">
+                <div class="text-6xl text-blue-600 mb-4" id="weather-icon">
+                    <i class="fas fa-cloud-sun"></i> <!-- Default Icon -->
+                </div>
+                <div class="flex items-start">
+                    <span id="temperature" class="text-7xl font-bold text-gray-800 tracking-tighter">--</span>
+                    <span class="text-3xl font-medium text-gray-500 mt-2">°C</span>
+                </div>
+                <p id="weather-description" class="text-lg text-gray-600 capitalize mt-2 font-medium">Fetching conditions...</p>
+            </div>
+
+            <!-- Details Grid -->
+            <div class="grid grid-cols-2 gap-4 border-t border-gray-200 pt-6">
+                <div class="flex flex-col items-center p-3 bg-gray-50 rounded-2xl">
+                    <i class="fas fa-wind text-gray-400 text-xl mb-2"></i>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Wind Speed</p>
+                    <p id="wind-speed" class="text-lg font-bold text-gray-800 mt-1">-- km/h</p>
+                </div>
+                
+                <div class="flex flex-col items-center p-3 bg-gray-50 rounded-2xl">
+                    <i class="fas fa-tint text-blue-400 text-xl mb-2"></i>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Humidity</p>
+                    <p id="humidity" class="text-lg font-bold text-gray-800 mt-1">-- %</p>
+                </div>
+
+                 <div class="flex flex-col items-center p-3 bg-gray-50 rounded-2xl">
+                    <i class="fas fa-compress-arrows-alt text-gray-400 text-xl mb-2"></i>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Pressure</p>
+                    <p id="pressure" class="text-lg font-bold text-gray-800 mt-1">-- hPa</p>
+                </div>
+                
+                <div class="flex flex-col items-center p-3 bg-gray-50 rounded-2xl">
+                    <i class="fas fa-sun text-yellow-500 text-xl mb-2"></i>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold">UV Index</p>
+                    <p id="uv-index" class="text-lg font-bold text-gray-800 mt-1">--</p>
+                </div>
+            </div>
+
+            <p class="text-xs text-gray-400 mt-6 mt-6">Data provided by Open-Meteo API</p>
+        </div>
+    </div>
+
+    <script>
+        // UI Elements
+        const loadingState = document.getElementById('loading-state');
+        const errorState = document.getElementById('error-state');
+        const weatherState = document.getElementById('weather-state');
+        const errorMessage = document.getElementById('error-message');
+        
+        // Weather Data Elements
+        const tempEl = document.getElementById('temperature');
+        const descEl = document.getElementById('weather-description');
+        const windEl = document.getElementById('wind-speed');
+        const humidityEl = document.getElementById('humidity');
+        const pressureEl = document.getElementById('pressure');
+        const uvEl = document.getElementById('uv-index');
+        const iconEl = document.getElementById('weather-icon');
+        const locationEl = document.getElementById('location-name');
+
+        // Helper function to manage UI state
+        function showState(state) {
+            loadingState.classList.add('hidden');
+            errorState.classList.add('hidden');
+            weatherState.classList.add('hidden');
+
+            if (state === 'loading') loadingState.classList.remove('hidden');
+            else if (state === 'error') errorState.classList.remove('hidden');
+            else if (state === 'weather') weatherState.classList.remove('hidden');
+        }
+
+        // Initialize App
+        function init() {
+            getLocation();
+        }
+
+        // Step 1: Get User Location using HTML5 Geolocation API
+        function getLocation() {
+            showState('loading');
+            
+            if ("geolocation" in navigator) {
+                // Request location with high accuracy
+                navigator.geolocation.getCurrentPosition(
+                    positionSuccess, 
+                    positionError,
+                    {
+                        enableHighAccuracy: false, // Set to false to get a faster, rough location if acceptable
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                showError("Geolocation is not supported by your browser.");
+            }
+        }
+
+        function positionSuccess(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            // Optionally update UI to show we got coordinates
+            loadingState.querySelector('p').innerText = "Fetching weather data...";
+            
+            // Try to get city name via reverse geocoding (using Open-Meteo Geocoding API if needed, or a free alternative)
+            // For simplicity and relying strictly on free Open-Meteo, we'll fetch weather directly.
+            // Open-Meteo doesn't provide reverse geocoding in the weather API response itself.
+            locationEl.innerHTML = `<i class="fas fa-map-marker-alt mr-1"></i> Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`;
+            
+            fetchWeather(lat, lon);
+        }
+
+        function positionError(error) {
+            let msg = "An unknown error occurred.";
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    msg = "Location permission denied. Please allow location access in your browser settings.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    msg = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    msg = "The request to get user location timed out.";
+                    break;
+            }
+            showError(msg);
+        }
+
+        function showError(message) {
+            errorMessage.innerText = message;
+            showState('error');
+        }
+
+        // Step 2: Fetch Weather Data from Open-Meteo API (No API Key Required)
+        async function fetchWeather(lat, lon) {
+            // Using Open-Meteo API. Requesting current conditions: temp, wind, humidity, pressure, weathercode
+            // Also requesting daily UV index for today.
+            const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,surface_pressure&daily=uv_index_max&timezone=auto`;
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                updateUI(data);
+            } catch (error) {
+                console.error("Error fetching weather:", error);
+                showError("Failed to retrieve weather data from server.");
+            }
+        }
+
+        // Step 3: Map WMO Weather Codes to UI details (Icon and Description)
+        function getWeatherDetails(code, isDay) {
+            let desc = "Unknown";
+            let iconClass = "fas fa-question text-gray-500"; // Default
+
+            // WMO Weather interpretation codes (WW)
+            if (code === 0) {
+                desc = "Clear sky";
+                iconClass = isDay ? "fas fa-sun text-yellow-500" : "fas fa-moon text-blue-300";
+            } else if (code === 1 || code === 2 || code === 3) {
+                desc = code === 1 ? "Mainly clear" : (code === 2 ? "Partly cloudy" : "Overcast");
+                iconClass = isDay ? "fas fa-cloud-sun text-gray-400" : "fas fa-cloud-moon text-gray-400";
+                if(code === 3) iconClass = "fas fa-cloud text-gray-500";
+            } else if (code === 45 || code === 48) {
+                desc = "Fog";
+                iconClass = "fas fa-smog text-gray-400";
+            } else if (code >= 51 && code <= 57) {
+                desc = "Drizzle";
+                iconClass = "fas fa-cloud-rain text-blue-400";
+            } else if (code >= 61 && code <= 67) {
+                desc = "Rain";
+                iconClass = "fas fa-cloud-showers-heavy text-blue-500";
+            } else if (code >= 71 && code <= 77) {
+                desc = "Snow fall";
+                iconClass = "fas fa-snowflake text-blue-200";
+            } else if (code >= 80 && code <= 82) {
+                desc = "Rain showers";
+                iconClass = "fas fa-cloud-showers-water text-blue-500";
+            } else if (code >= 85 && code <= 86) {
+                desc = "Snow showers";
+                iconClass = "fas fa-poo-storm text-blue-200"; // Close enough icon for snow shower
+            } else if (code >= 95) {
+                desc = "Thunderstorm";
+                iconClass = "fas fa-bolt text-yellow-400";
+            }
+
+            return { desc, iconClass };
+        }
+
+        // Step 4: Update the DOM with fetched data
+        function updateUI(data) {
+            const current = data.current;
+            const daily = data.daily;
+            
+            // Basic data
+            tempEl.innerText = Math.round(current.temperature_2m);
+            windEl.innerText = `${current.wind_speed_10m} km/h`;
+            humidityEl.innerText = `${current.relative_humidity_2m}%`;
+            pressureEl.innerText = `${current.surface_pressure} hPa`;
+            
+            // UV Index (taking max for the current day from the daily array)
+            const uvIndex = daily.uv_index_max && daily.uv_index_max.length > 0 ? daily.uv_index_max[0] : '--';
+            uvEl.innerText = uvIndex;
+
+            // Icon and Description
+            const weatherDetails = getWeatherDetails(current.weather_code, current.is_day);
+            descEl.innerText = weatherDetails.desc;
+            iconEl.innerHTML = `<i class="${weatherDetails.iconClass}"></i>`;
+
+            // Display the weather state
+            showState('weather');
+        }
+
+        // Start the application when the page loads
+        window.onload = init;
+
+    </script>
+</body>
+</html>
